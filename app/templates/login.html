@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Login - NEARMISS System{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-logo">
+        <img src="{{ url_for('static', filename='icons/logo.png') }}" alt="Company Logo">
+        <h2 class="text-center mt-3 text-primary-green">NEARMISS System</h2>
+        <p class="text-center text-muted">Near Miss Reporting Portal</p>
+    </div>
+    
+    <!-- Plant User Quick Entry -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-lightning-charge-fill me-2"></i>Quick Entry
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">Select your name to quickly report a near miss:</p>
+            <form method="POST" action="{{ url_for('login') }}">
+                <input type="hidden" name="login_type" value="plant">
+                <div class="mb-3">
+                    <select name="plant_user" class="form-select" required>
+                        <option value="">Choose your name...</option>
+                        {% for user in users %}
+                        <option value="{{ user.username }}">{{ user.first_name }} {{ user.last_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-success w-100">
+                    <i class="bi bi-plus-circle-fill me-2"></i>Near Miss Entry
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Divider -->
+    <div class="plant-entry-divider">
+        <span>or login with credentials</span>
+    </div>
+    
+    <!-- Regular Login -->
+    <form method="POST" action="{{ url_for('login') }}">
+        <input type="hidden" name="login_type" value="regular">
+        
+        <div class="mb-3">
+            <label for="username" class="form-label required">Username</label>
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-person-fill"></i>
+                </span>
+                <input type="text" class="form-control" id="username" name="username" 
+                       placeholder="Enter username" required>
+            </div>
+        </div>
+        
+        <div class="mb-4">
+            <label for="password" class="form-label required">Password</label>
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-lock-fill"></i>
+                </span>
+                <input type="password" class="form-control" id="password" name="password" 
+                       placeholder="Enter password" required>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Login
+        </button>
+    </form>
+    
+    <div class="text-center mt-4">
+        <small class="text-muted">
+            <i class="bi bi-info-circle me-1"></i>
+            Need access? Contact your administrator.
+        </small>
+    </div>
+</div>
+
+<script>
+// Enhanced dropdown with search functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const plantUserSelect = document.querySelector('select[name="plant_user"]');
+    
+    if (plantUserSelect) {
+        // Add search functionality
+        plantUserSelect.addEventListener('change', function() {
+            if (this.value) {
+                // Auto-submit when user is selected
+                const selectedOption = this.options[this.selectedIndex];
+                if (selectedOption.value) {
+                    // Show loading state
+                    const button = document.querySelector('button[type="submit"]');
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '<div class="loading-spinner"></div>Logging in...';
+                    button.disabled = true;
+                    
+                    // Submit after short delay to show loading state
+                    setTimeout(() => {
+                        this.form.submit();
+                    }, 500);
+                }
+            }
+        });
+        
+        // Focus on dropdown when page loads
+        plantUserSelect.focus();
+    }
+});
+</script>
+{% endblock %}

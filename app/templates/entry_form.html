@@ -1,0 +1,628 @@
+{% extends "base.html" %}
+
+{% block title %}Near Miss Entry - NEARMISS System{% endblock %}
+
+{% block head %}
+<!-- Date picker CSS -->
+<style>
+.form-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.form-section h5 {
+    color: var(--primary-green-dark);
+    border-bottom: 2px solid var(--primary-green-light);
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+}
+
+.supervisor-only {
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.supervisor-only .badge {
+    background-color: #856404;
+}
+
+.char-counter {
+    font-size: 12px;
+    color: var(--medium-gray);
+    text-align: right;
+    margin-top: 3px;
+}
+
+.char-counter.warning {
+    color: var(--warning-orange);
+}
+
+.char-counter.danger {
+    color: var(--danger-red);
+}
+
+.file-upload-area {
+    border: 2px dashed #ced4da;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    background-color: #f8f9fa;
+    transition: border-color 0.3s;
+    cursor: pointer;
+}
+
+.file-upload-area:hover {
+    border-color: var(--primary-green);
+}
+
+.file-upload-area.dragover {
+    border-color: var(--primary-green);
+    background-color: var(--primary-green-light);
+}
+
+.hidden {
+    display: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="text-primary-green">
+            <i class="bi bi-plus-circle-fill me-2"></i>Near Miss Entry
+        </h1>
+        <p class="text-muted">Report a safety incident or near miss occurrence</p>
+    </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data" class="compact-form">
+    
+    <!-- Basic Information Section -->
+    <div class="form-section">
+        <h5><i class="bi bi-calendar-event me-2"></i>Basic Information</h5>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <label for="date_occurred" class="form-label required">Date Occurred</label>
+                <input type="date" class="form-control" id="date_occurred" name="date_occurred" 
+                       value="{{ date.today() }}" required>
+            </div>
+            <div class="col-md-6">
+                <label for="time_occurred" class="form-label required">Time Occurred</label>
+                <select class="form-select" id="time_occurred" name="time_occurred" required>
+                    {% for hour in range(24) %}
+                        {% for minute in [0, 15, 30, 45] %}
+                            {% set time_str = "%02d:%02d"|format(hour, minute) %}
+                            <option value="{{ time_str }}" {% if time_str == current_time %}selected{% endif %}>
+                                {{ time_str }}
+                            </option>
+                        {% endfor %}
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <label for="plant" class="form-label required">Plant</label>
+                <select class="form-select" id="plant" name="plant" required onchange="updatePlantData()">
+                    <option value="Red Oak" {% if session.get('plant') == 'Red Oak' %}selected{% endif %}>Red Oak</option>
+                    <option value="Telford" {% if session.get('plant') == 'Telford' %}selected{% endif %}>Telford</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="employee_id" class="form-label required">Employee</label>
+                <select class="form-select" id="employee_id" name="employee_id" required onchange="handleEmployeeChange()">
+                    <option value="">Select Employee...</option>
+                    {% for user in users %}
+                    <option value="{{ user.user_id }}" {% if user.user_id == session.get('user_id') %}selected{% endif %}>
+                        {{ user.first_name }} {{ user.last_name }}
+                    </option>
+                    {% endfor %}
+                    <option value="new">+ Add New Employee</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Location Information Section -->
+    <div class="form-section">
+        <h5><i class="bi bi-geo-alt-fill me-2"></i>Location Information</h5>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <label for="dept_id" class="form-label">Department</label>
+                <select class="form-select" id="dept_id" name="dept_id" onchange="updateEquipment()">
+                    <option value="">Select Department...</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.dept_id }}">{{ dept.dept_name }}</option>
+                    {% endfor %}
+                    <option value="custom">+ Add Custom Department</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="equipment_area" class="form-label">Equipment/Area</label>
+                <input type="text" class="form-control" id="equipment_area" name="equipment_area" 
+                       placeholder="Enter equipment or area name">
+                <small class="text-muted">Type equipment name or select from dropdown</small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Hazard Information Section -->
+    <div class="form-section">
+        <h5><i class="bi bi-exclamation-triangle-fill me-2"></i>Hazard Information</h5>
+        
+        {% if session.get('is_supervisor') or session.get('is_admin') %}
+        <div class="supervisor-only">
+            <div class="d-flex align-items-center mb-3">
+                <span class="badge me-2">Supervisor/Admin Only</span>
+                <strong>Hazard Assessment</strong>
+            </div>
+            <div class="row">
+                <div class="col-12">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="hazard_assessment" 
+                               id="high_immediate" value="High/Immediate">
+                        <label class="form-check-label" for="high_immediate">
+                            <span class="badge bg-danger">High/Immediate</span>
+                            <small class="d-block text-muted">Severe injury risk - stop work immediately</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="hazard_assessment" 
+                               id="medium" value="Medium">
+                        <label class="form-check-label" for="medium">
+                            <span class="badge bg-warning">Medium</span>
+                            <small class="d-block text-muted">Minor to moderate injury risk</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="hazard_assessment" 
+                               id="low" value="Low">
+                        <label class="form-check-label" for="low">
+                            <span class="badge bg-info">Low</span>
+                            <small class="d-block text-muted">Unlikely to cause injury but should be addressed</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="hazard_assessment" 
+                               id="resolved" value="Resolved/No Hazard">
+                        <label class="form-check-label" for="resolved">
+                            <span class="badge bg-success">Resolved/No Hazard</span>
+                            <small class="d-block text-muted">No significant risk present</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="row">
+            <div class="col-md-6">
+                <label for="hazard_type_id" class="form-label">Hazard Type</label>
+                <select class="form-select" id="hazard_type_id" name="hazard_type_id" onchange="toggleCustomHazard()">
+                    <option value="">Select Hazard Type...</option>
+                    {% for hazard in hazard_types %}
+                    <option value="{{ hazard.hazard_type_id }}">{{ hazard.hazard_type }}</option>
+                    {% endfor %}
+                    <option value="custom">+ Other (specify below)</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="custom_hazard_type" class="form-label">Custom Hazard Type</label>
+                <input type="text" class="form-control" id="custom_hazard_type" name="custom_hazard_type" 
+                       placeholder="Describe the hazard type" disabled>
+                <small class="text-muted">Only enabled when 'Other' is selected above</small>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-12">
+                <label for="description" class="form-label required">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="4" 
+                          maxlength="400" required placeholder="Describe the near miss incident in detail..."></textarea>
+                <div class="char-counter" id="char-counter">0 / 400 characters</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Information Section -->
+    <div class="form-section">
+        <h5><i class="bi bi-lightning-charge-fill me-2"></i>Action Information</h5>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <label for="immediate_action_id" class="form-label">Immediate Action Taken</label>
+                <select class="form-select" id="immediate_action_id" name="immediate_action_id">
+                    <option value="">Select Action...</option>
+                    {% for action in immediate_actions %}
+                    <option value="{{ action.action_id }}">{{ action.action_description }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        {% if session.get('is_supervisor') or session.get('is_admin') %}
+        <div class="supervisor-only mt-3">
+            <div class="d-flex align-items-center mb-3">
+                <span class="badge me-2">Supervisor/Admin Only</span>
+                <strong>Corrective Action & Follow-up</strong>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="corrective_action" class="form-label">Corrective Action Required</label>
+                    <textarea class="form-control" id="corrective_action" name="corrective_action" rows="3" 
+                              placeholder="Describe corrective actions needed..."></textarea>
+                </div>
+                <div class="col-md-6">
+                    <label for="responsible_party_id" class="form-label">Responsible Party</label>
+                    <select class="form-select" id="responsible_party_id" name="responsible_party_id">
+                        <option value="">Select Responsible Person...</option>
+                        {% for user in users %}
+                            {% if user.is_supervisor or user.is_admin %}
+                            <option value="{{ user.user_id }}">{{ user.first_name }} {{ user.last_name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" id="corrective_action_completed" 
+                               name="corrective_action_completed" onchange="toggleCompletionFields()">
+                        <label class="form-check-label" for="corrective_action_completed">
+                            Corrective Action Completed
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label for="completion_date" class="form-label">Completion Date</label>
+                    <input type="date" class="form-control" id="completion_date" name="completion_date" disabled>
+                </div>
+                <div class="col-md-4">
+                    <label for="completed_by_id" class="form-label">Completed By</label>
+                    <select class="form-select" id="completed_by_id" name="completed_by_id" disabled>
+                        <option value="">Select Person...</option>
+                        {% for user in users %}
+                            {% if user.is_supervisor or user.is_admin %}
+                            <option value="{{ user.user_id }}">{{ user.first_name }} {{ user.last_name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- File Attachments Section -->
+    <div class="form-section">
+        <h5><i class="bi bi-paperclip me-2"></i>Attachments (Optional)</h5>
+        
+        <div class="file-upload-area" id="file-upload-area" onclick="document.getElementById('file-input').click()">
+            <i class="bi bi-cloud-upload" style="font-size: 2rem; color: var(--primary-green);"></i>
+            <p class="mt-2 mb-1">Click to select files or drag and drop</p>
+            <small class="text-muted">Images: JPG, PNG, GIF (Max 5MB each)</small>
+            <input type="file" id="file-input" name="attachments" multiple 
+                   accept="image/*" class="hidden" onchange="handleFiles(this.files)">
+        </div>
+        
+        <div id="file-preview" class="mt-3"></div>
+    </div>
+    
+    <!-- Submit Section -->
+    <div class="text-center">
+        <button type="submit" class="btn btn-primary btn-lg me-3">
+            <i class="bi bi-check-circle-fill me-2"></i>Submit Near Miss Report
+        </button>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-x-circle me-2"></i>Cancel
+        </a>
+    </div>
+    
+</form>
+
+<!-- New Employee Modal -->
+<div class="modal fade" id="newEmployeeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Employee</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="new_first_name" class="form-label required">First Name</label>
+                    <input type="text" class="form-control" id="new_first_name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="new_last_name" class="form-label required">Last Name</label>
+                    <input type="text" class="form-control" id="new_last_name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="new_plant" class="form-label required">Plant</label>
+                    <select class="form-select" id="new_plant" required>
+                        <option value="Red Oak">Red Oak</option>
+                        <option value="Telford">Telford</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addNewEmployee()">Add Employee</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize form
+document.addEventListener('DOMContentLoaded', function() {
+    // Set current time as default
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = Math.floor(now.getMinutes() / 15) * 15;
+    const timeString = String(currentHour).padStart(2, '0') + ':' + String(currentMinute).padStart(2, '0');
+    
+    const timeSelect = document.getElementById('time_occurred');
+    if (timeSelect) {
+        timeSelect.value = timeString;
+    }
+    
+    // Character counter for description
+    const descriptionTextarea = document.getElementById('description');
+    const charCounter = document.getElementById('char-counter');
+    
+    descriptionTextarea.addEventListener('input', function() {
+        const length = this.value.length;
+        charCounter.textContent = length + ' / 400 characters';
+        
+        if (length > 350) {
+            charCounter.className = 'char-counter danger';
+        } else if (length > 300) {
+            charCounter.className = 'char-counter warning';
+        } else {
+            charCounter.className = 'char-counter';
+        }
+    });
+    
+    // File upload drag and drop
+    const fileUploadArea = document.getElementById('file-upload-area');
+    
+    fileUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+    
+    fileUploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+    
+    fileUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+    });
+});
+
+function handleEmployeeChange() {
+    const select = document.getElementById('employee_id');
+    if (select.value === 'new') {
+        const modal = new bootstrap.Modal(document.getElementById('newEmployeeModal'));
+        modal.show();
+        select.value = ''; // Reset select
+    }
+}
+
+function addNewEmployee() {
+    const firstName = document.getElementById('new_first_name').value.trim();
+    const lastName = document.getElementById('new_last_name').value.trim();
+    const plant = document.getElementById('new_plant').value;
+    
+    if (!firstName || !lastName) {
+        alert('Please enter both first and last name');
+        return;
+    }
+    
+    // Capitalize names
+    const capFirst = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    const capLast = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase();
+    
+    // Create username
+    const username = capFirst.charAt(0).toLowerCase() + capLast.toLowerCase();
+    
+    // Add via API call
+    fetch('/api/add-employee', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            first_name: capFirst,
+            last_name: capLast,
+            plant: plant,
+            username: username
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Add to select dropdown
+            const select = document.getElementById('employee_id');
+            const newOption = document.createElement('option');
+            newOption.value = data.user_id;
+            newOption.textContent = capFirst + ' ' + capLast;
+            newOption.selected = true;
+            
+            // Insert before the "Add New" option
+            const addNewOption = select.querySelector('option[value="new"]');
+            select.insertBefore(newOption, addNewOption);
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('newEmployeeModal'));
+            modal.hide();
+            
+            // Clear form
+            document.getElementById('new_first_name').value = '';
+            document.getElementById('new_last_name').value = '';
+        } else {
+            alert('Error adding employee: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error adding employee');
+    });
+}
+
+function toggleCustomHazard() {
+    const select = document.getElementById('hazard_type_id');
+    const customInput = document.getElementById('custom_hazard_type');
+    
+    if (select.value === 'custom') {
+        customInput.disabled = false;
+        customInput.required = true;
+        customInput.focus();
+    } else {
+        customInput.disabled = true;
+        customInput.required = false;
+        customInput.value = '';
+    }
+}
+
+function toggleCompletionFields() {
+    const checkbox = document.getElementById('corrective_action_completed');
+    const dateField = document.getElementById('completion_date');
+    const completedByField = document.getElementById('completed_by_id');
+    
+    if (checkbox.checked) {
+        dateField.disabled = false;
+        dateField.value = new Date().toISOString().split('T')[0]; // Today's date
+        completedByField.disabled = false;
+        completedByField.value = {{ session.get('user_id', '""') }};
+    } else {
+        dateField.disabled = true;
+        dateField.value = '';
+        completedByField.disabled = true;
+        completedByField.value = '';
+    }
+}
+
+function updatePlantData() {
+    const plant = document.getElementById('plant').value;
+    
+    // Update departments based on plant
+    fetch(`/api/departments/${plant}`)
+        .then(response => response.json())
+        .then(departments => {
+            const deptSelect = document.getElementById('dept_id');
+            deptSelect.innerHTML = '<option value="">Select Department...</option>';
+            
+            departments.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept.dept_id;
+                option.textContent = dept.dept_name;
+                deptSelect.appendChild(option);
+            });
+            
+            const customOption = document.createElement('option');
+            customOption.value = 'custom';
+            customOption.textContent = '+ Add Custom Department';
+            deptSelect.appendChild(customOption);
+        });
+    
+    // Update users based on plant
+    fetch(`/api/users/${plant}`)
+        .then(response => response.json())
+        .then(users => {
+            const userSelect = document.getElementById('employee_id');
+            userSelect.innerHTML = '<option value="">Select Employee...</option>';
+            
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.user_id;
+                option.textContent = user.first_name + ' ' + user.last_name;
+                userSelect.appendChild(option);
+            });
+            
+            const newOption = document.createElement('option');
+            newOption.value = 'new';
+            newOption.textContent = '+ Add New Employee';
+            userSelect.appendChild(newOption);
+        });
+}
+
+function updateEquipment() {
+    const deptId = document.getElementById('dept_id').value;
+    const plant = document.getElementById('plant').value;
+    
+    if (deptId && deptId !== 'custom') {
+        fetch(`/api/equipment/${plant}/${deptId}`)
+            .then(response => response.json())
+            .then(equipment => {
+                const equipInput = document.getElementById('equipment_area');
+                
+                // Create datalist for autocomplete
+                let datalist = document.getElementById('equipment-datalist');
+                if (!datalist) {
+                    datalist = document.createElement('datalist');
+                    datalist.id = 'equipment-datalist';
+                    equipInput.setAttribute('list', 'equipment-datalist');
+                    equipInput.parentNode.appendChild(datalist);
+                }
+                
+                datalist.innerHTML = '';
+                equipment.forEach(equip => {
+                    const option = document.createElement('option');
+                    option.value = equip.equip_name;
+                    datalist.appendChild(option);
+                });
+            });
+    }
+}
+
+function handleFiles(files) {
+    const preview = document.getElementById('file-preview');
+    preview.innerHTML = '';
+    
+    Array.from(files).forEach(file => {
+        if (file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024) {
+            const div = document.createElement('div');
+            div.className = 'file-item d-inline-block me-2 mb-2';
+            div.innerHTML = `
+                <div class="card" style="width: 150px;">
+                    <img src="${URL.createObjectURL(file)}" class="card-img-top" style="height: 100px; object-fit: cover;">
+                    <div class="card-body p-2">
+                        <small class="card-text">${file.name}</small>
+                    </div>
+                </div>
+            `;
+            preview.appendChild(div);
+        }
+    });
+}
+
+// Initialize plant data on load
+updatePlantData();
+</script>
+{% endblock %}
