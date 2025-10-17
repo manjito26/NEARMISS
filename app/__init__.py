@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 from .utils.auth import AuthManager
 from .models.database import NearMissDatabase
+from .utils.email import EmailManager
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +25,7 @@ def create_app():
     # Initialize components
     auth_manager = AuthManager()
     db = NearMissDatabase()
+    email_manager = EmailManager()
     
     try:
         # Test database connection
@@ -124,10 +126,35 @@ def create_app():
                     'responsible_party_id': request.form.get('responsible_party_id')
                 }
                 
-                # Submit the report (implement in database model)
+                # Submit the report
                 success = db.create_near_miss_report(data, session['user_id'])
                 
                 if success:
+                    # Send email notifications
+                    try:
+                        report_data = {
+                            'report_id': 'Latest',  # Would get actual ID from database
+                            'date_occurred': data.get('date_occurred'),
+                            'time_occurred': data.get('time_occurred'),
+                            'employee_name': session.get('full_name'),
+                            'plant': data.get('plant'),
+                            'dept_name': 'Department',  # Would get from database
+                            'equipment_area': data.get('equipment_area'),
+                            'hazard_assessment': data.get('hazard_assessment'),
+                            'description': data.get('description'),
+                            'immediate_action': 'Action taken',  # Would get from database
+                            'created_by': session.get('full_name')
+                        }
+                        
+                        # Send appropriate notification based on priority
+                        if data.get('hazard_assessment') == 'High/Immediate':
+                            email_manager.send_near_miss_notification(report_data, 'high_priority')
+                        else:
+                            email_manager.send_near_miss_notification(report_data, 'new_report')
+                            
+                    except Exception as e:
+                        logger.warning(f"Email notification failed: {e}")
+                    
                     flash('Near miss report submitted successfully')
                     logger.info(f"Near miss report created by {session['username']}")
                     return redirect(url_for('reports'))
@@ -232,7 +259,7 @@ def create_app():
         users = db.get_all_users(plant)
         return jsonify(users)
     
-    @app.route('/api/add-employee', methods=['POST'])
+@app.route('/api/add-employee', methods=['POST'])
     def api_add_employee():
         """API endpoint to add a new employee"""
         if 'username' not in session:
@@ -263,6 +290,91 @@ def create_app():
         except Exception as e:
             logger.error(f"Error adding employee: {e}")
             return jsonify({'success': False, 'message': 'Server error'}), 500
+    
+    @app.route('/admin/email', methods=['GET', 'POST'])
+    def admin_email():
+        """Admin page for email configuration"""
+        if 'username' not in session or not session.get('is_admin'):
+            flash('Access denied. Admin privileges required.')
+            return redirect(url_for('index'))
+        
+        if request.method == 'POST':
+            try:
+                config = {
+                    'smtp_server': request.form.get('smtp_server'),
+                    'smtp_port': int(request.form.get('smtp_port', 587)),
+                    'username': request.form.get('email_username'),
+                    'password_encrypted': request.form.get('password'),  # Should be encrypted in production
+                    'auth_type': request.form.get('auth_type', 'STARTTLS'),
+                    'use_auth': 'use_auth' in request.form,
+                    'timeout': int(request.form.get('timeout', 30)),
+                    'retries': int(request.form.get('retries', 3))
+                }
+                
+                if email_manager.save_email_config(config):
+                    flash('Email configuration saved successfully')
+                    # Reload configuration
+                    email_manager.config = email_manager.load_email_config()
+                else:
+                    flash('Error saving email configuration')
+                    
+            except Exception as e:
+                logger.error(f"Error saving email config: {e}")
+                flash('Error saving email configuration')
+        
+        # Get current configuration and queue status
+        current_config = email_manager.config
+        queue_status = email_manager.get_email_queue_status()
+        
+        return render_template('admin_email.html',
+                             config=current_config,
+                             queue_status=queue_status,
+                             username=session['username'])
+    
+    @app.route('/admin/email/test', methods=['POST'])
+    def test_email_config():
+        """Test email configuration"""
+        if 'username' not in session or not session.get('is_admin'):
+            return jsonify({'error': 'Access denied'}), 403
+        
+        try:
+            test_email = request.form.get('test_email', session.get('username', '') + '@fresco.com')
+            
+            # Test connection first
+            if not email_manager.test_email_connection():
+                return jsonify({'success': False, 'message': 'SMTP connection failed'})
+            
+            # Send test email
+            success = email_manager.send_email(
+                test_email,
+                'NEARMISS System - Email Test',
+                '<h3>Email Configuration Test</h3><p>This is a test email from the NEARMISS system. Email configuration is working properly.</p>'
+            )
+            
+            if success:
+                return jsonify({'success': True, 'message': f'Test email sent to {test_email}'})
+            else:
+                return jsonify({'success': False, 'message': 'Failed to send test email'})
+                
+        except Exception as e:
+            logger.error(f"Email test error: {e}")
+            return jsonify({'success': False, 'message': 'Email test failed'})
+    
+    @app.route('/admin/email/queue/process', methods=['POST'])
+    def process_email_queue():
+        """Manually process email queue"""
+        if 'username' not in session or not session.get('is_admin'):
+            return jsonify({'error': 'Access denied'}), 403
+        
+        try:
+            sent_count = email_manager.send_queued_emails()
+            return jsonify({
+                'success': True, 
+                'message': f'Processed email queue. {sent_count} emails sent successfully.'
+            })
+        except Exception as e:
+            logger.error(f"Email queue processing error: {e}")
+            return jsonify({'success': False, 'message': 'Failed to process email queue'})
     
     @app.route('/debug')
     def debug():

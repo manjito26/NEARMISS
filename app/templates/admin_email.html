@@ -1,0 +1,497 @@
+{% extends "base.html" %}
+
+{% block title %}Email Configuration - NEARMISS System{% endblock %}
+
+{% block head %}
+<style>
+.config-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-card {
+    background: linear-gradient(135deg, var(--primary-green-light), var(--primary-green));
+    color: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.queue-stats {
+    display: flex;
+    justify-content: space-around;
+    text-align: center;
+}
+
+.stat-item {
+    flex: 1;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.connection-status {
+    padding: 10px 15px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.status-connected {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status-disconnected {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.status-unknown {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.email-log {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 15px;
+    margin-top: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.log-entry {
+    padding: 8px 0;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.9rem;
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-status {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.status-sent {
+    background-color: #28a745;
+    color: white;
+}
+
+.status-pending {
+    background-color: #ffc107;
+    color: black;
+}
+
+.status-failed {
+    background-color: #dc3545;
+    color: white;
+}
+
+.test-section {
+    background: #e3f2fd;
+    border: 1px solid #bbdefb;
+    border-radius: 6px;
+    padding: 15px;
+    margin-top: 15px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="text-primary-green">
+            <i class="bi bi-envelope-gear me-2"></i>Email Configuration
+        </h1>
+        <p class="text-muted">Configure SMTP settings and manage email notifications</p>
+    </div>
+</div>
+
+<!-- Email Queue Status -->
+<div class="status-card">
+    <h5 class="mb-3">
+        <i class="bi bi-speedometer2 me-2"></i>Email Queue Status
+    </h5>
+    
+    <div class="queue-stats">
+        <div class="stat-item">
+            <div class="stat-number">{{ queue_status.get('pending', 0) }}</div>
+            <div class="stat-label">Pending</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ queue_status.get('sent', 0) }}</div>
+            <div class="stat-label">Sent</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ queue_status.get('failed', 0) }}</div>
+            <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-number">{{ queue_status.get('recent_emails', [])|length }}</div>
+            <div class="stat-label">Recent</div>
+        </div>
+    </div>
+    
+    <div class="text-center mt-3">
+        <button type="button" class="btn btn-light" onclick="processEmailQueue()">
+            <i class="bi bi-play-circle-fill me-2"></i>Process Queue
+        </button>
+        <button type="button" class="btn btn-outline-light ms-2" onclick="refreshStatus()">
+            <i class="bi bi-arrow-clockwise me-2"></i>Refresh
+        </button>
+    </div>
+</div>
+
+<!-- SMTP Configuration -->
+<div class="config-section">
+    <h5 class="mb-3">
+        <i class="bi bi-gear-fill me-2"></i>SMTP Server Configuration
+    </h5>
+    
+    <!-- Connection Status -->
+    <div id="connectionStatus" class="connection-status status-unknown">
+        <i class="bi bi-question-circle-fill me-2"></i>Connection status unknown - Click "Test Connection" to verify
+    </div>
+    
+    <form method="POST" id="emailConfigForm">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="smtp_server" class="form-label required">SMTP Server</label>
+                    <input type="text" class="form-control" id="smtp_server" name="smtp_server" 
+                           value="{{ config.get('smtp_server', 'smtp.office365.com') }}" required
+                           placeholder="smtp.office365.com">
+                    <div class="form-text">Exchange Online, Gmail, or other SMTP server</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="smtp_port" class="form-label required">Port</label>
+                    <select class="form-select" id="smtp_port" name="smtp_port" required>
+                        <option value="587" {% if config.get('smtp_port') == 587 %}selected{% endif %}>587 (STARTTLS)</option>
+                        <option value="465" {% if config.get('smtp_port') == 465 %}selected{% endif %}>465 (SSL/TLS)</option>
+                        <option value="25" {% if config.get('smtp_port') == 25 %}selected{% endif %}>25 (Unsecured)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="auth_type" class="form-label">Authentication</label>
+                    <select class="form-select" id="auth_type" name="auth_type">
+                        <option value="STARTTLS" {% if config.get('auth_type') == 'STARTTLS' %}selected{% endif %}>STARTTLS</option>
+                        <option value="SSL" {% if config.get('auth_type') == 'SSL' %}selected{% endif %}>SSL/TLS</option>
+                        <option value="NONE" {% if config.get('auth_type') == 'NONE' %}selected{% endif %}>None</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="email_username" class="form-label required">Email Username</label>
+                    <input type="email" class="form-control" id="email_username" name="email_username" 
+                           value="{{ config.get('username', 'nearmiss@fresco.com') }}" required
+                           placeholder="nearmiss@fresco.com">
+                    <div class="form-text">Email address used for sending notifications</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="password" class="form-label required">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" 
+                           {% if config.get('password_encrypted') %}placeholder="Password configured (leave blank to keep current)"{% else %}placeholder="Enter email password" required{% endif %}>
+                    <div class="form-text">App password or regular password for email account</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="timeout" class="form-label">Connection Timeout (seconds)</label>
+                    <input type="number" class="form-control" id="timeout" name="timeout" 
+                           value="{{ config.get('timeout', 30) }}" min="10" max="120">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="retries" class="form-label">Max Retry Attempts</label>
+                    <input type="number" class="form-control" id="retries" name="retries" 
+                           value="{{ config.get('retries', 3) }}" min="1" max="10">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" id="use_auth" name="use_auth" 
+                               {% if config.get('use_auth', True) %}checked{% endif %}>
+                        <label class="form-check-label" for="use_auth">
+                            Use Authentication
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center">
+            <button type="submit" class="btn btn-primary me-3">
+                <i class="bi bi-check-circle-fill me-2"></i>Save Configuration
+            </button>
+            <button type="button" class="btn btn-outline-primary" onclick="testConnection()">
+                <i class="bi bi-wifi me-2"></i>Test Connection
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Test Email Section -->
+<div class="config-section">
+    <h5 class="mb-3">
+        <i class="bi bi-envelope-check-fill me-2"></i>Test Email Configuration
+    </h5>
+    
+    <div class="test-section">
+        <div class="row align-items-end">
+            <div class="col-md-8">
+                <label for="test_email" class="form-label">Test Email Address</label>
+                <input type="email" class="form-control" id="test_email" 
+                       value="{{ session.get('username') }}@fresco.com" 
+                       placeholder="Enter email address to receive test message">
+            </div>
+            <div class="col-md-4">
+                <button type="button" class="btn btn-info w-100" onclick="sendTestEmail()">
+                    <i class="bi bi-envelope-paper-fill me-2"></i>Send Test Email
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="testResult" class="mt-3" style="display: none;"></div>
+</div>
+
+<!-- Email Queue Log -->
+{% if queue_status.get('recent_emails') %}
+<div class="config-section">
+    <h5 class="mb-3">
+        <i class="bi bi-clock-history me-2"></i>Recent Email Activity
+    </h5>
+    
+    <div class="email-log">
+        {% for email in queue_status.get('recent_emails', [])[:20] %}
+        <div class="log-entry">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <strong>{{ email[0] }}</strong>
+                </div>
+                <div class="col-md-4">
+                    {{ email[1] }}
+                </div>
+                <div class="col-md-2">
+                    <span class="log-status status-{{ email[2] }}">{{ email[2].upper() }}</span>
+                </div>
+                <div class="col-md-3 text-muted small">
+                    {{ email[3].strftime('%m/%d/%Y %H:%M') if email[3] else 'N/A' }}
+                    {% if email[4] %}
+                        <br><small>Sent: {{ email[4].strftime('%m/%d/%Y %H:%M') }}</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Notification Settings -->
+<div class="config-section">
+    <h5 class="mb-3">
+        <i class="bi bi-bell-fill me-2"></i>Notification Settings
+    </h5>
+    
+    <div class="alert alert-info">
+        <h6><i class="bi bi-info-circle-fill me-2"></i>Automatic Notifications</h6>
+        <p class="mb-2">The system automatically sends email notifications in the following scenarios:</p>
+        <ul class="mb-0">
+            <li><strong>New Report:</strong> When any near miss report is submitted</li>
+            <li><strong>High Priority:</strong> When a report is marked as "High/Immediate" priority</li>
+            <li><strong>Updates:</strong> When supervisors/admins modify existing reports</li>
+        </ul>
+    </div>
+    
+    <div class="alert alert-success">
+        <h6><i class="bi bi-people-fill me-2"></i>Recipients</h6>
+        <p class="mb-0">Notifications are sent to all users with Supervisor or Administrator privileges who have passwords configured (can login to the system).</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testConnection() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<div class="loading-spinner"></div>Testing...';
+    
+    const statusDiv = document.getElementById('connectionStatus');
+    statusDiv.className = 'connection-status status-unknown';
+    statusDiv.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Testing connection...';
+    
+    fetch('/admin/email/test', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'test_email=' + encodeURIComponent(document.getElementById('test_email').value)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusDiv.className = 'connection-status status-connected';
+            statusDiv.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Connection successful - SMTP server is reachable';
+        } else {
+            statusDiv.className = 'connection-status status-disconnected';
+            statusDiv.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>Connection failed: ' + data.message;
+        }
+    })
+    .catch(error => {
+        statusDiv.className = 'connection-status status-disconnected';
+        statusDiv.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>Connection test failed: ' + error.message;
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
+
+function sendTestEmail() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    const testEmail = document.getElementById('test_email').value;
+    
+    if (!testEmail) {
+        alert('Please enter a test email address');
+        return;
+    }
+    
+    button.disabled = true;
+    button.innerHTML = '<div class="loading-spinner"></div>Sending...';
+    
+    const resultDiv = document.getElementById('testResult');
+    resultDiv.style.display = 'none';
+    
+    fetch('/admin/email/test', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'test_email=' + encodeURIComponent(testEmail)
+    })
+    .then(response => response.json())
+    .then(data => {
+        resultDiv.style.display = 'block';
+        if (data.success) {
+            resultDiv.className = 'alert alert-success';
+            resultDiv.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>' + data.message;
+        } else {
+            resultDiv.className = 'alert alert-danger';
+            resultDiv.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>' + data.message;
+        }
+    })
+    .catch(error => {
+        resultDiv.style.display = 'block';
+        resultDiv.className = 'alert alert-danger';
+        resultDiv.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i>Test email failed: ' + error.message;
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
+
+function processEmailQueue() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<div class="loading-spinner"></div>Processing...';
+    
+    fetch('/admin/email/queue/process', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload(); // Refresh to show updated queue status
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error processing email queue: ' + error.message);
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
+
+function refreshStatus() {
+    location.reload();
+}
+
+// Form validation
+document.getElementById('emailConfigForm').addEventListener('submit', function(e) {
+    const smtpServer = document.getElementById('smtp_server').value.trim();
+    const username = document.getElementById('email_username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    
+    if (!smtpServer || !username) {
+        e.preventDefault();
+        alert('SMTP server and email username are required.');
+        return;
+    }
+    
+    // If no existing password and no new password provided
+    if (!password && !{{ 'true' if config.get('password_encrypted') else 'false' }}) {
+        e.preventDefault();
+        alert('Password is required for email configuration.');
+        return;
+    }
+});
+
+// Auto-update port based on authentication type
+document.getElementById('auth_type').addEventListener('change', function() {
+    const portSelect = document.getElementById('smtp_port');
+    const authType = this.value;
+    
+    if (authType === 'STARTTLS' && portSelect.value !== '587') {
+        portSelect.value = '587';
+    } else if (authType === 'SSL' && portSelect.value !== '465') {
+        portSelect.value = '465';
+    }
+});
+</script>
+{% endblock %}

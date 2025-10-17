@@ -58,15 +58,15 @@ def main():
         
         # Application configuration
         host = '0.0.0.0'  # Allow external connections
-        port = 5000
+        port = 7758
         
         logger.info(f"Starting server on http://{host}:{port}")
         logger.info("Available endpoints:")
-        logger.info("  - http://localhost:5000/login (Login page)")
-        logger.info("  - http://localhost:5000/ (Dashboard)")
-        logger.info("  - http://localhost:5000/entry (Near Miss Entry)")
-        logger.info("  - http://localhost:5000/reports (View Reports)")
-        logger.info("  - http://localhost:5000/debug (Debug information)")
+        logger.info("  - http://localhost:7758/login (Login page)")
+        logger.info("  - http://localhost:7758/ (Dashboard)")
+        logger.info("  - http://localhost:7758/entry (Near Miss Entry)")
+        logger.info("  - http://localhost:7758/reports (View Reports)")
+        logger.info("  - http://localhost:7758/debug (Debug information)")
         logger.info("="*60)
         
         # Start the Flask development server

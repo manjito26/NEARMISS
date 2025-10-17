@@ -1,0 +1,539 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - NEARMISS System{% endblock %}
+
+{% block head %}
+<style>
+.admin-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.user-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.user-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.user-avatar {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, var(--primary-green), var(--primary-green-dark));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.role-badge {
+    font-size: 0.8rem;
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+
+.role-admin {
+    background-color: var(--danger-red);
+    color: white;
+}
+
+.role-supervisor {
+    background-color: var(--warning-orange);
+    color: white;
+}
+
+.role-user {
+    background-color: var(--info-blue);
+    color: white;
+}
+
+.stats-row {
+    background: linear-gradient(135deg, var(--primary-green-light), var(--primary-green));
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 25px;
+    color: white;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.plant-filter {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="text-primary-green">
+            <i class="bi bi-people-fill me-2"></i>User Management
+        </h1>
+        <p class="text-muted">Manage system users and permissions</p>
+    </div>
+</div>
+
+<!-- Statistics -->
+<div class="stats-row">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="stat-item">
+                <div class="stat-number">{{ users|length }}</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-item">
+                <div class="stat-number">{{ users|selectattr('is_admin')|list|length }}</div>
+                <div class="stat-label">Administrators</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-item">
+                <div class="stat-number">{{ users|selectattr('is_supervisor')|list|length }}</div>
+                <div class="stat-label">Supervisors</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-item">
+                <div class="stat-number">{{ users|selectattr('plant', 'equalto', 'Red Oak')|list|length }}</div>
+                <div class="stat-label">Red Oak Plant</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions and Filters -->
+<div class="admin-section">
+    <div class="row align-items-center mb-3">
+        <div class="col-md-6">
+            <h5 class="mb-0">
+                <i class="bi bi-gear-fill me-2"></i>User Management Actions
+            </h5>
+        </div>
+        <div class="col-md-6 text-end">
+            <button type="button" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                <i class="bi bi-person-plus-fill me-2"></i>Add User
+            </button>
+            <button type="button" class="btn btn-outline-primary" onclick="exportUsers()">
+                <i class="bi bi-download me-2"></i>Export CSV
+            </button>
+        </div>
+    </div>
+    
+    <!-- Plant Filter -->
+    <div class="plant-filter">
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <label for="plantFilter" class="form-label mb-0">Filter by Plant:</label>
+            </div>
+            <div class="col-md-8">
+                <div class="btn-group" role="group" aria-label="Plant filter">
+                    <input type="radio" class="btn-check" name="plantFilter" id="allPlants" value="" checked>
+                    <label class="btn btn-outline-primary" for="allPlants">All Plants</label>
+                    
+                    <input type="radio" class="btn-check" name="plantFilter" id="redOak" value="Red Oak">
+                    <label class="btn btn-outline-primary" for="redOak">Red Oak</label>
+                    
+                    <input type="radio" class="btn-check" name="plantFilter" id="telford" value="Telford">
+                    <label class="btn btn-outline-primary" for="telford">Telford</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users List -->
+<div class="admin-section">
+    <h5 class="mb-3">
+        <i class="bi bi-list-ul me-2"></i>System Users
+    </h5>
+    
+    <div id="usersList">
+        {% for user in users %}
+        <div class="user-card" data-plant="{{ user.plant }}">
+            <div class="row align-items-center">
+                <div class="col-md-1">
+                    <div class="user-avatar">
+                        {{ user.first_name[0] }}{{ user.last_name[0] }}
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <h6 class="mb-1">{{ user.first_name }} {{ user.last_name }}</h6>
+                    <small class="text-muted">{{ user.username }}</small>
+                </div>
+                
+                <div class="col-md-2">
+                    <div class="text-muted">
+                        <i class="bi bi-envelope-fill me-1"></i>{{ user.email }}
+                    </div>
+                </div>
+                
+                <div class="col-md-2">
+                    <div class="text-muted">
+                        <i class="bi bi-building-fill me-1"></i>{{ user.plant }}
+                    </div>
+                </div>
+                
+                <div class="col-md-2">
+                    {% if user.is_admin %}
+                        <span class="badge role-badge role-admin">
+                            <i class="bi bi-shield-fill-check me-1"></i>Admin
+                        </span>
+                    {% elif user.is_supervisor %}
+                        <span class="badge role-badge role-supervisor">
+                            <i class="bi bi-star-fill me-1"></i>Supervisor
+                        </span>
+                    {% else %}
+                        <span class="badge role-badge role-user">
+                            <i class="bi bi-person-fill me-1"></i>User
+                        </span>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-2 text-end">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary" onclick="editUser({{ user.user_id }})">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-warning" onclick="resetPassword({{ user.user_id }})">
+                            <i class="bi bi-key-fill"></i>
+                        </button>
+                        {% if user.user_id != session.get('user_id') %}
+                        <button type="button" class="btn btn-outline-danger" onclick="deleteUser({{ user.user_id }}, '{{ user.first_name }} {{ user.last_name }}')">
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if not users %}
+    <div class="text-center py-5">
+        <i class="bi bi-person-x" style="font-size: 3rem; color: var(--light-gray);"></i>
+        <h4 class="mt-3 text-muted">No Users Found</h4>
+        <p class="text-muted">Add users to get started with the system.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-person-plus-fill me-2"></i>Add New User
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addUserForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="addFirstName" class="form-label required">First Name</label>
+                            <input type="text" class="form-control" id="addFirstName" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="addLastName" class="form-label required">Last Name</label>
+                            <input type="text" class="form-control" id="addLastName" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="addUsername" class="form-label required">Username</label>
+                        <input type="text" class="form-control" id="addUsername" required>
+                        <div class="form-text">Auto-generated based on name, but can be customized</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="addEmail" class="form-label required">Email</label>
+                        <input type="email" class="form-control" id="addEmail" required>
+                        <div class="form-text">Auto-generated, but can be customized</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="addPlant" class="form-label required">Plant</label>
+                        <select class="form-select" id="addPlant" required>
+                            <option value="">Select Plant...</option>
+                            <option value="Red Oak">Red Oak</option>
+                            <option value="Telford">Telford</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="addPassword" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="addPassword" placeholder="Leave blank for regular plant user">
+                        <div class="form-text">Only required for supervisors and admins</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">User Role</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="userRole" id="roleUser" value="user" checked>
+                            <label class="form-check-label" for="roleUser">
+                                <span class="badge role-badge role-user me-2">User</span>
+                                Regular plant user (no password required)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="userRole" id="roleSupervisor" value="supervisor">
+                            <label class="form-check-label" for="roleSupervisor">
+                                <span class="badge role-badge role-supervisor me-2">Supervisor</span>
+                                Can edit all reports and access restricted fields
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="userRole" id="roleAdmin" value="admin">
+                            <label class="form-check-label" for="roleAdmin">
+                                <span class="badge role-badge role-admin me-2">Admin</span>
+                                Full system access and user management
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-person-plus-fill me-2"></i>Add User
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-pencil-square me-2"></i>Edit User
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editUserForm">
+                <div class="modal-body">
+                    <input type="hidden" id="editUserId">
+                    <!-- Similar form fields as add user modal -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="editFirstName" class="form-label required">First Name</label>
+                            <input type="text" class="form-control" id="editFirstName" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="editLastName" class="form-label required">Last Name</label>
+                            <input type="text" class="form-control" id="editLastName" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editEmail" class="form-label required">Email</label>
+                        <input type="email" class="form-control" id="editEmail" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editPlant" class="form-label required">Plant</label>
+                        <select class="form-select" id="editPlant" required>
+                            <option value="Red Oak">Red Oak</option>
+                            <option value="Telford">Telford</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">User Role</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="editUserRole" id="editRoleUser" value="user">
+                            <label class="form-check-label" for="editRoleUser">
+                                <span class="badge role-badge role-user me-2">User</span>
+                                Regular plant user
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="editUserRole" id="editRoleSupervisor" value="supervisor">
+                            <label class="form-check-label" for="editRoleSupervisor">
+                                <span class="badge role-badge role-supervisor me-2">Supervisor</span>
+                                Can edit all reports
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="editUserRole" id="editRoleAdmin" value="admin">
+                            <label class="form-check-label" for="editRoleAdmin">
+                                <span class="badge role-badge role-admin me-2">Admin</span>
+                                Full system access
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle-fill me-2"></i>Update User
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-generate username and email
+document.addEventListener('DOMContentLoaded', function() {
+    const firstNameInput = document.getElementById('addFirstName');
+    const lastNameInput = document.getElementById('addLastName');
+    const usernameInput = document.getElementById('addUsername');
+    const emailInput = document.getElementById('addEmail');
+    
+    function updateAutoFields() {
+        const firstName = firstNameInput.value.trim();
+        const lastName = lastNameInput.value.trim();
+        
+        if (firstName && lastName) {
+            const username = firstName.charAt(0).toLowerCase() + lastName.toLowerCase();
+            usernameInput.value = username;
+            emailInput.value = username + '@fresco.com';
+        }
+    }
+    
+    firstNameInput.addEventListener('input', updateAutoFields);
+    lastNameInput.addEventListener('input', updateAutoFields);
+    
+    // Plant filter functionality
+    const plantFilters = document.querySelectorAll('input[name="plantFilter"]');
+    plantFilters.forEach(filter => {
+        filter.addEventListener('change', function() {
+            filterUsersByPlant(this.value);
+        });
+    });
+});
+
+function filterUsersByPlant(plant) {
+    const userCards = document.querySelectorAll('.user-card');
+    
+    userCards.forEach(card => {
+        if (plant === '' || card.dataset.plant === plant) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function editUser(userId) {
+    // Implementation for editing user
+    alert(`Edit user functionality for user ID ${userId} would be implemented here.`);
+    
+    // This would populate the edit modal with user data
+    // const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+    // modal.show();
+}
+
+function resetPassword(userId) {
+    if (confirm('Are you sure you want to reset this user\'s password? A new temporary password will be generated.')) {
+        // Implementation for password reset
+        alert(`Password reset functionality for user ID ${userId} would be implemented here.`);
+    }
+}
+
+function deleteUser(userId, userName) {
+    if (confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
+        // Implementation for user deletion
+        alert(`Delete user functionality for user ID ${userId} would be implemented here.`);
+    }
+}
+
+function exportUsers() {
+    // Implementation for CSV export
+    window.location.href = '{{ url_for("admin_users") }}?export=csv';
+}
+
+// Add User Form Submission
+document.getElementById('addUserForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {
+        first_name: document.getElementById('addFirstName').value.trim(),
+        last_name: document.getElementById('addLastName').value.trim(),
+        username: document.getElementById('addUsername').value.trim(),
+        email: document.getElementById('addEmail').value.trim(),
+        plant: document.getElementById('addPlant').value,
+        password: document.getElementById('addPassword').value,
+        role: document.querySelector('input[name="userRole"]:checked').value
+    };
+    
+    // Validate required fields
+    if (!formData.first_name || !formData.last_name || !formData.username || !formData.email || !formData.plant) {
+        alert('Please fill in all required fields.');
+        return;
+    }
+    
+    // Validate password for supervisor/admin roles
+    if ((formData.role === 'supervisor' || formData.role === 'admin') && !formData.password) {
+        alert('Password is required for supervisors and administrators.');
+        return;
+    }
+    
+    // Submit via AJAX (implementation needed)
+    console.log('Adding user:', formData);
+    alert('User add functionality would be implemented here with AJAX call to backend.');
+    
+    // Close modal and reset form
+    bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+    this.reset();
+});
+
+// Role change handler
+document.querySelectorAll('input[name="userRole"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const passwordField = document.getElementById('addPassword');
+        const passwordLabel = passwordField.previousElementSibling;
+        
+        if (this.value === 'supervisor' || this.value === 'admin') {
+            passwordField.required = true;
+            passwordLabel.textContent = 'Password (Required)';
+            passwordField.placeholder = 'Enter secure password';
+        } else {
+            passwordField.required = false;
+            passwordLabel.textContent = 'Password';
+            passwordField.placeholder = 'Leave blank for regular plant user';
+        }
+    });
+});
+</script>
+{% endblock %}
