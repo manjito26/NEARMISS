@@ -191,7 +191,19 @@ NEARMISS/
 - Mobile-friendly design
 - Debug endpoint for development
 
+## GitHub Repository
+**Repository URL**: https://github.com/manjito26/NEARMISS.git
+**Status**: Public repository with complete codebase
+**Initial Commit**: 2025-10-17 - Complete near miss reporting system with database, templates, and admin interface
+
 ## Change Log
+### 2025-10-17 02:30:15
+- Created GitHub repository: https://github.com/manjito26/NEARMISS.git
+- Successfully pushed complete codebase to public repository
+- Added comprehensive README.md with setup and usage instructions
+- Initialized Git repository with proper .gitignore for Python projects
+- Created .gitkeep files for empty directories to maintain structure
+
 ### 2025-10-17 02:03:37
 - Downloaded Bootstrap 5 CSS and JS for local CDN storage
 - Created green-themed CSS following Warp.dev standards
